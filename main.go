@@ -23,8 +23,6 @@ var transaksi []Transaksi
 func main() {
 	users = make(map[string]Akun)
 
-	users["1234567890"] = Akun{"1234567890", "password123", 100.0}
-
 	var choice int
 	for {
 		fmt.Println("1. Buat akun")
@@ -62,19 +60,19 @@ func main() {
 
 func createAccount() {
 	var phoneNumber, password string
-	fmt.Print("Enter phone number: ")
+	fmt.Print("Masukkan No. HP: ")
 	fmt.Scanln(&phoneNumber)
 
 	if _, ok := users[phoneNumber]; ok {
-		fmt.Println("Account already exists.")
+		fmt.Println("Akun sudah ada.")
 		return
 	}
 
-	fmt.Print("Enter password: ")
+	fmt.Print("Masukkan password: ")
 	fmt.Scanln(&password)
 
 	users[phoneNumber] = Akun{phoneNumber, password, 0.0}
-	fmt.Println("Account created successfully.")
+	fmt.Println("Akun berhasil dibuat.")
 }
 
 func login() {
@@ -125,36 +123,36 @@ func transferBalance() {
 	if user, ok := users[from]; ok {
 		if user.Balance >= amount {
 			user.Balance -= amount
-			users[to].Balance += amount
+			user.Balance += amount
 			transaksi = append(transaksi, Transaksi{from, to, amount})
 			fmt.Println("Transfer successful.")
 		} else {
-			fmt.Println("Insufficient balance.")
+			fmt.Println("Balance tidak cukup.")
 		}
 	} else {
-		fmt.Println("Account not found.")
+		fmt.Println("Akun tidak ada.")
 	}
 }
 
 func viewProfile() {
 	var phoneNumber string
-	fmt.Print("Enter phone number to view profile: ")
+	fmt.Print("Masukan No. HP untuk melihat profil: ")
 	fmt.Scanln(&phoneNumber)
 
 	if user, ok := users[phoneNumber]; ok {
-		fmt.Println("Phone Number:", user.NoHP)
+		fmt.Println("No. HP:", user.NoHP)
 		fmt.Println("Balance:", user.Balance)
 	} else {
-		fmt.Println("Account not found.")
+		fmt.Println("Akun tidak ada.")
 	}
 }
 
 func viewTransactionHistory() {
-	fmt.Println("Transaction History:")
+	fmt.Println("History Transaksi:")
 	for i, transaction := range transaksi {
-		fmt.Println("Transaction", i+1)
-		fmt.Println("From:", transaction.Dari)
-		fmt.Println("To:", transaction.Ke)
-		fmt.Println("Amount:", strconv.FormatFloat(transaction.Jumlah, 'f', 2, 64))
+		fmt.Println("Transaksi", i+1)
+		fmt.Println("Dari:", transaction.Dari)
+		fmt.Println("Ke:", transaction.Ke)
+		fmt.Println("Jumlah:", strconv.FormatFloat(transaction.Jumlah, 'f', 2, 64))
 	}
 }
