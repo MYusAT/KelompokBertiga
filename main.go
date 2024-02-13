@@ -65,7 +65,6 @@ func createAccount() {
 	fmt.Print("Enter phone number: ")
 	fmt.Scanln(&phoneNumber)
 
-	// Check if the account already exists
 	if _, ok := users[phoneNumber]; ok {
 		fmt.Println("Account already exists.")
 		return
