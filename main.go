@@ -23,7 +23,7 @@ var transaksi []Transaksi
 func main() {
 	users = make(map[string]Akun)
 
-	var choice int
+	var menu int
 	for {
 		fmt.Println("1. Buat akun")
 		fmt.Println("2. Login")
@@ -34,9 +34,9 @@ func main() {
 		fmt.Println("7. Exit")
 
 		fmt.Print("Masukkan pilihan: ")
-		fmt.Scanln(&choice)
+		fmt.Scanln(&menu)
 
-		switch choice {
+		switch menu {
 		case 1:
 			createAccount()
 		case 2:
@@ -53,7 +53,7 @@ func main() {
 			fmt.Println("Exiting...")
 			return
 		default:
-			fmt.Println("Invalid choice.")
+			fmt.Println("Pilihan salah.")
 		}
 	}
 }
