@@ -2,26 +2,40 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"strconv"
+
+	"gorm.io/driver/mysql"
+	"gorm.io/gorm"
 )
 
 type Akun struct {
-	NoHP     string
+	gorm.Model
+	NoHP     string `gorm:"unique"`
 	Password string
 	Balance  float64
 }
 
 type Transaksi struct {
+	gorm.Model
 	Dari   string
 	Ke     string
 	Jumlah float64
 }
 
-var users map[string]Akun
-var transaksi []Transaksi
+var db *gorm.DB
 
 func main() {
-	users = make(map[string]Akun)
+	var err error
+	dsn := "root:@tcp(localhost:3306)/groupproject?charset=utf8mb4&parseTime=True&loc=Local"
+	db, err = gorm.Open(mysql.Open(dsn), &gorm.Config{})
+	if err != nil {
+		log.Fatalf("Failed to connect to database: %v", err)
+	}
+	err = db.AutoMigrate(&Akun{}, &Transaksi{})
+	if err != nil {
+		log.Fatalf("Failed to auto migrate models: %v", err)
+	}
 
 	var menu int
 	for {
@@ -63,7 +77,9 @@ func createAccount() {
 	fmt.Print("Masukkan No. HP: ")
 	fmt.Scanln(&phoneNumber)
 
-	if _, ok := users[phoneNumber]; ok {
+	var existingUser Akun
+	result := db.Where("no_hp = ?", phoneNumber).First(&existingUser)
+	if result.Error == nil {
 		fmt.Println("Akun sudah ada.")
 		return
 	}
@@ -71,7 +87,11 @@ func createAccount() {
 	fmt.Print("Masukkan password: ")
 	fmt.Scanln(&password)
 
-	users[phoneNumber] = Akun{phoneNumber, password, 0.0}
+	newUser := Akun{NoHP: phoneNumber, Password: password}
+	result = db.Create(&newUser)
+	if result.Error != nil {
+		log.Fatalf("Failed to create account: %v", result.Error)
+	}
 	fmt.Println("Akun berhasil dibuat.")
 }
 
@@ -83,11 +103,11 @@ func login() {
 	fmt.Print("Masukkan password: ")
 	fmt.Scanln(&password)
 
-	if user, ok := users[phoneNumber]; ok {
-		if user.Password == password {
-			fmt.Println("Login berhasil.")
-			return
-		}
+	var user Akun
+	result := db.Where("no_hp = ? AND password = ?", phoneNumber, password).First(&user)
+	if result.Error == nil {
+		fmt.Println("Login berhasil.")
+		return
 	}
 	fmt.Println("No. HP dan password salah.")
 }
@@ -98,20 +118,28 @@ func topUpBalance() {
 	fmt.Print("Masukkan No. HP: ")
 	fmt.Scanln(&phoneNumber)
 
-	if user, ok := users[phoneNumber]; ok {
-		fmt.Print("Masukkan jumlah top up: ")
-		fmt.Scanln(&amount)
-		user.Balance += amount
-		fmt.Println("Top-up berhasil.")
-	} else {
+	var user Akun
+	result := db.Where("no_hp = ?", phoneNumber).First(&user)
+	if result.Error != nil {
 		fmt.Println("Akun tidak ada.")
+		return
 	}
+
+	fmt.Print("Masukkan jumlah top up: ")
+	fmt.Scanln(&amount)
+
+	user.Balance += amount
+	result = db.Save(&user)
+	if result.Error != nil {
+		log.Fatalf("Failed to top up balance: %v", result.Error)
+	}
+	fmt.Println("Top-up berhasil.")
 }
 
 func transferBalance() {
 	var from, to string
 	var amount float64
-	fmt.Print("Masukkan No. HP: ")
+	fmt.Print("Masukkan No. HP pengirim: ")
 	fmt.Scanln(&from)
 
 	fmt.Print("Masukkan No. HP penerima: ")
@@ -120,18 +148,45 @@ func transferBalance() {
 	fmt.Print("Masukkan jumlah transfer: ")
 	fmt.Scanln(&amount)
 
-	if user, ok := users[from]; ok {
-		if user.Balance >= amount {
-			user.Balance -= amount
-			user.Balance += amount
-			transaksi = append(transaksi, Transaksi{from, to, amount})
-			fmt.Println("Transfer successful.")
-		} else {
-			fmt.Println("Balance tidak cukup.")
-		}
-	} else {
-		fmt.Println("Akun tidak ada.")
+	var userFrom, userTo Akun
+	resultFrom := db.Where("no_hp = ?", from).First(&userFrom)
+	resultTo := db.Where("no_hp = ?", to).First(&userTo)
+	if resultFrom.Error != nil {
+		fmt.Println("Akun pengirim tidak ada.")
+		return
 	}
+	if resultTo.Error != nil {
+		fmt.Println("Akun penerima tidak ada.")
+		return
+	}
+
+	if userFrom.Balance < amount {
+		fmt.Println("Balance tidak cukup.")
+		return
+	}
+
+	userFrom.Balance -= amount
+	userTo.Balance += amount
+
+	tx := db.Begin()
+	if err := tx.Error; err != nil {
+		log.Fatalf("Error beginning transaction: %v", err)
+	}
+
+	var result = tx.Save(&userFrom)
+	if result.Error != nil {
+		tx.Rollback()
+		log.Fatalf("Error saving sender account: %v", result.Error)
+	}
+
+	result = tx.Save(&userTo)
+	if result.Error != nil {
+		tx.Rollback()
+		log.Fatalf("Error saving receiver account: %v", result.Error)
+	}
+
+	tx.Commit()
+	fmt.Println("Transfer berhasil.")
 }
 
 func viewProfile() {
@@ -139,17 +194,25 @@ func viewProfile() {
 	fmt.Print("Masukan No. HP untuk melihat profil: ")
 	fmt.Scanln(&phoneNumber)
 
-	if user, ok := users[phoneNumber]; ok {
-		fmt.Println("No. HP:", user.NoHP)
-		fmt.Println("Balance:", user.Balance)
-	} else {
+	var user Akun
+	result := db.Where("no_hp = ?", phoneNumber).First(&user)
+	if result.Error != nil {
 		fmt.Println("Akun tidak ada.")
+		return
 	}
+
+	fmt.Println("No. HP:", user.NoHP)
+	fmt.Println("Balance:", user.Balance)
 }
 
 func viewTransactionHistory() {
+	var transactions []Transaksi
+	result := db.Find(&transactions)
+	if result.Error != nil {
+		log.Fatalf("Failed to fetch transaction history: %v", result.Error)
+	}
 	fmt.Println("History Transaksi:")
-	for i, transaction := range transaksi {
+	for i, transaction := range transactions {
 		fmt.Println("Transaksi", i+1)
 		fmt.Println("Dari:", transaction.Dari)
 		fmt.Println("Ke:", transaction.Ke)
